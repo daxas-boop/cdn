@@ -17,6 +17,7 @@ int echoPin = 21;
 bool enCiclo = false;
 unsigned long inicioCiclo = 0;
 unsigned long tiempoDeteccion = 0;
+unsigned long tiempoSalidaPersona = 0;
 bool personaDetectada = false;
 
 WebServer server(80);
@@ -112,13 +113,27 @@ void actualizarSemaforo() {
 
   if (transcurrido < 3000) ponerAvenidaAmarillo();
   else if (transcurrido < 5000) ponerCalleAmarillo();
-  else if (transcurrido < 20000) ponerCalleVerde();
+  else if (transcurrido < 20000) {
+    ponerCalleVerde();
+    mantenerCalleVerdeSiPersonaDetectada();
+  }
   else if (transcurrido < 23000) ponerCalleAmarillo();
   else if (transcurrido < 25000) ponerAvenidaAmarillo();
   else {
     ponerAvenidaVerde();
     enCiclo = false;
     inicioCiclo = 0;
+    tiempoSalidaPersona = 0;
+  }
+}
+
+void mantenerCalleVerdeSiPersonaDetectada() {
+  if (tiempoSalidaPersona == 0) {
+    if (personaDetectada) {
+      inicioCiclo = millis() - 5000;  // Mantener pausado mientras hay persona
+    } else {
+      tiempoSalidaPersona = millis();  // Marcar cuando se fue
+    }
   }
 }
 
@@ -219,22 +234,24 @@ void traerEstado() {
   String timerCalle = calleEnVerde ? String((20000 - transcurrido) / 1000) : "";
   String timerAvenida = avenidaEnRojo ? String((23000 - transcurrido) / 1000) : "";
 
-  String estado = R"(
-  <div class='semaforo'>
-    <h2>Calle</h2>
-    <div class='luz rojo )" + String(digitalRead(ledRojoCalle) ? "on" : "") + R"('></div>
-    <div class='luz amarillo )" + String(digitalRead(ledAmarilloCalle) ? "on" : "") + R"('></div>
-    <div class='luz verde )" + String(digitalRead(ledVerdeCalle) ? "on" : "") + R"('></div>
-    <div style='height:35px; line-height:35px; text-align:center; font-size:24px; color:#0f0; font-weight:bold;'>)" + timerCalle + R"(</div>
-  </div>
-  <div class='semaforo'>
-    <h2>Avenida</h2>
-    <div class='luz rojo )" + String(digitalRead(ledRojoAvenida) ? "on" : "") + R"('></div>
-    <div class='luz amarillo )" + String(digitalRead(ledAmarilloAvenida) ? "on" : "") + R"('></div>
-    <div class='luz verde )" + String(digitalRead(ledVerdeAvenida) ? "on" : "") + R"('></div>
-    <div style='height:35px; line-height:35px; text-align:center; font-size:24px; color:#f00; font-weight:bold;'>)" + timerAvenida + R"(</div>
-  </div>
-  )" + (personaDetectada ? "<div style='font-size:100px; position:absolute; bottom:20px; width:100%; text-align:center;'>🚶</div>" : "");
+  bool mostrarTimerCalle = calleEnVerde && tiempoSalidaPersona != 0;
+  bool mostrarTimerAvenida = avenidaEnRojo && (!personaDetectada || tiempoSalidaPersona != 0);
+
+  String estado = "<div class='semaforo'>"
+    "<h2>Calle</h2>"
+    "<div class='luz rojo " + String(digitalRead(ledRojoCalle) ? "on" : "") + "'></div>"
+    "<div class='luz amarillo " + String(digitalRead(ledAmarilloCalle) ? "on" : "") + "'></div>"
+    "<div class='luz verde " + String(digitalRead(ledVerdeCalle) ? "on" : "") + "'></div>"
+    "<div style='height:35px; line-height:35px; text-align:center; font-size:24px; color:#0f0; font-weight:bold; " + String(mostrarTimerCalle ? "" : "display:none;") + "'>" + timerCalle + "</div>"
+    "</div>"
+    "<div class='semaforo'>"
+    "<h2>Avenida</h2>"
+    "<div class='luz rojo " + String(digitalRead(ledRojoAvenida) ? "on" : "") + "'></div>"
+    "<div class='luz amarillo " + String(digitalRead(ledAmarilloAvenida) ? "on" : "") + "'></div>"
+    "<div class='luz verde " + String(digitalRead(ledVerdeAvenida) ? "on" : "") + "'></div>"
+    "<div style='height:35px; line-height:35px; text-align:center; font-size:24px; color:#f00; font-weight:bold; " + String(mostrarTimerAvenida ? "" : "display:none;") + "'>" + timerAvenida + "</div>"
+    "</div>" +
+    (personaDetectada ? "<div style='font-size:100px; position:absolute; bottom:20px; width:100%; text-align:center;'>🚶</div>" : "");
 
   server.send(200, "text/html", estado);
 }
