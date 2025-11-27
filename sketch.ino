@@ -1,26 +1,27 @@
-#include <WiFi.h>
-#include <WebServer.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
 
-char* wifiUser = "USER";
-char* wifiPassword = "PASS";
+const char* wifiUser = "POCO F3";
+const char* wifiPassword = "GrupoSinNombre";
 
-int ledVerdeCalle = 16;
-int ledAmarilloCalle = 17;
-int ledRojoCalle = 18;
-int ledVerdeAvenida = 33;
-int ledAmarilloAvenida = 25;
-int ledRojoAvenida = 26;
-int pinBoton = 15;
-int trigPin = 22;
-int echoPin = 21;
+int ledVerdeCalle = 4;
+int ledAmarilloCalle = 5;
+int ledRojoCalle = 16;
+int ledVerdeAvenida = 15;
+int ledAmarilloAvenida = 2;
+int ledRojoAvenida = 0;
+int pinBoton = 13;
+int trigPin = 14;
+int echoPin = 12;
 
 bool enCiclo = false;
 unsigned long inicioCiclo = 0;
 unsigned long tiempoDeteccion = 0;
-unsigned long tiempoSalidaPersona = 0;
-bool personaDetectada = false;
+unsigned long tiempoSalidaCoche = 0;
+bool cocheDetectado = false;
+const int limiteSensor = 15;
 
-WebServer server(80);
+ESP8266WebServer server(80);
 
 void setup() {
   Serial.begin(115200);
@@ -80,8 +81,8 @@ void chequearBoton() {
 // Requiere detectar por 5 segundos para activar el ciclo
 void chequearUltrasonico() {
   float distancia = medirDistancia();
-  bool hayAlguien = distancia < 15 && distancia != 0;
-  personaDetectada = hayAlguien;
+  bool hayAlguien = distancia < limiteSensor && distancia != 0;
+  cocheDetectado = hayAlguien;
 
   if (!hayAlguien) {
     tiempoDeteccion = 0;
@@ -109,30 +110,30 @@ void actualizarSemaforo() {
     inicioCiclo = millis();
   }
 
-  long transcurrido = millis() - inicioCiclo;
+  long t = millis() - inicioCiclo;
 
-  if (transcurrido < 3000) ponerAvenidaAmarillo();
-  else if (transcurrido < 5000) ponerCalleAmarillo();
-  else if (transcurrido < 20000) {
+  if (t < 3000) ponerAvenidaAmarillo();
+  else if (t < 5000) ponerCalleAmarillo();
+  else if (t < 20000) {
     ponerCalleVerde();
-    mantenerCalleVerdeSiPersonaDetectada();
+    mantenerCalleVerdeSiCocheDetectado();
   }
-  else if (transcurrido < 23000) ponerCalleAmarillo();
-  else if (transcurrido < 25000) ponerAvenidaAmarillo();
+  else if (t < 23000) ponerCalleAmarillo();
+  else if (t < 25000) ponerAvenidaAmarillo();
   else {
     ponerAvenidaVerde();
     enCiclo = false;
     inicioCiclo = 0;
-    tiempoSalidaPersona = 0;
+    tiempoSalidaCoche = 0;
   }
 }
 
-void mantenerCalleVerdeSiPersonaDetectada() {
-  if (tiempoSalidaPersona == 0) {
-    if (personaDetectada) {
-      inicioCiclo = millis() - 5000;  // Mantener pausado mientras hay persona
+void mantenerCalleVerdeSiCocheDetectado() {
+  if (tiempoSalidaCoche == 0) {
+    if (cocheDetectado) {
+      inicioCiclo = millis() - 5000;  // Mantener pausado mientras hay coche detectado
     } else {
-      tiempoSalidaPersona = millis();  // Marcar cuando se fue
+      tiempoSalidaCoche = millis();  // Marcar cuando se fue
     }
   }
 }
@@ -234,8 +235,8 @@ void traerEstado() {
   String timerCalle = calleEnVerde ? String((20000 - transcurrido) / 1000) : "";
   String timerAvenida = avenidaEnRojo ? String((23000 - transcurrido) / 1000) : "";
 
-  bool mostrarTimerCalle = calleEnVerde && tiempoSalidaPersona != 0;
-  bool mostrarTimerAvenida = avenidaEnRojo && (!personaDetectada || tiempoSalidaPersona != 0);
+  bool mostrarTimerCalle = calleEnVerde && tiempoSalidaCoche != 0;
+  bool mostrarTimerAvenida = avenidaEnRojo && (!cocheDetectado || tiempoSalidaCoche != 0);
 
   String estado = "<div class='semaforo'>"
     "<h2>Calle</h2>"
@@ -251,7 +252,7 @@ void traerEstado() {
     "<div class='luz verde " + String(digitalRead(ledVerdeAvenida) ? "on" : "") + "'></div>"
     "<div style='height:35px; line-height:35px; text-align:center; font-size:24px; color:#f00; font-weight:bold; " + String(mostrarTimerAvenida ? "" : "display:none;") + "'>" + timerAvenida + "</div>"
     "</div>" +
-    (personaDetectada ? "<div style='font-size:100px; position:absolute; bottom:20px; width:100%; text-align:center;'>🚶</div>" : "");
+    (cocheDetectado ? "<div style='font-size:100px; position:absolute; bottom:20px; width:100%; text-align:center;'>🚘</div>" : "");
 
   server.send(200, "text/html", estado);
 }
